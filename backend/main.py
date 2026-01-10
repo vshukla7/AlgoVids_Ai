@@ -8,6 +8,8 @@ from fastapi.middleware.cors import CORSMiddleware
 import subprocess
 import os
 from dotenv import load_dotenv
+from google import genai
+from google.genai import types
 
 # Load .env as fallback
 load_dotenv()
@@ -144,7 +146,7 @@ async def handle_generate_video(request_data: GenerateVideoRequest, request: Req
         )
         
         # Execute the FFmpeg command
-        result = subprocess.run(ffmpeg_cmd, shell=True, capture_output=True, text=True)
+        result = subprocess.run(ffmpeg_cmd, shell=True, capture_output=True, text=True, encoding='utf-8', errors='ignore')
         
         if result.returncode == 0:
             output_path = os.path.abspath("final_output.mp4")
@@ -175,6 +177,48 @@ async def get_generated_video(filename: str):
             )
     
     raise HTTPException(status_code=404, detail=f"Video not found: {filename}")
+
+class TranslateRequest(BaseModel):
+    text: str
+
+@app.post('/translate-hindi')
+async def translate_to_hindi(request_data: TranslateRequest, request: Request):
+    if not request_data.text:
+        raise HTTPException(status_code=400, detail="Text is required")
+    
+    # Get API key from header or fallback to .env
+    gemini_key = request.headers.get('x-gemini-key') or os.getenv('GEMINI_API_KEY')
+    
+    if not gemini_key:
+        raise HTTPException(status_code=400, detail="Gemini API key not provided")
+    
+    try:
+        # Create client like in processor.py
+        client = genai.Client(api_key=gemini_key)
+            
+        # Create the prompt for translation
+        prompt = f"Translate the following text to Hindi. Only return the translated text without any additional explanation or comments:\n\n{request_data.text}"
+            
+        # Generate the translation using client like in processor.py
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=[prompt],
+            config=types.GenerateContentConfig(
+                temperature=0.0,
+                response_mime_type="text/plain"
+            )
+        )
+            
+        # Extract the translated text
+        translated_text = response.text.strip()
+            
+        return {
+            "original_text": request_data.text,
+            "translated_text": translated_text,
+            "language": "Hindi"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Translation failed: {str(e)}")
 
 class CleanupRequest(BaseModel):
     video_path: str = ""

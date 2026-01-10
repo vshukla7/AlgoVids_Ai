@@ -6,10 +6,14 @@ from google import genai
 from google.genai import types
 import subprocess
 from dotenv import load_dotenv
+import random
 
 load_dotenv()
 # Fallback key from .env if not provided
 DEFAULT_GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+def RandomFile():
+    return f"temp_{random.randint(1000, 9999)}.mp4"
 
 def compress_for_analysis(input_path):
     """Gemini ko bhejne ke liye video ko bohot chota aur halka banata hai"""
@@ -17,14 +21,14 @@ def compress_for_analysis(input_path):
     print("Compressing video for AI analysis (to avoid 503 error)...")
     # Low resolution (480p) and low bitrate to reduce server load
     cmd = f'ffmpeg -y -i "{input_path}" -vf "scale=-2:480" -b:v 500k -an "{output_path}"'
-    subprocess.run(cmd, shell=True, capture_output=True)
+    subprocess.run(cmd, shell=True, capture_output=True, text=True, encoding='utf-8', errors='ignore')
     return output_path
 
 def fix_path(path):
     """Windows paths fix for FFmpeg filter_complex"""
     return str(Path(path).absolute()).replace(os.sep, '/')
 
-def generate_smart_montage(original_video_path, audio_path, sfx_path, bgm_path, api_key=None):
+def generate_smart_montage(original_video_path, audio_path, sfx_path, bgm_path, api_key=""):
     """
     Generate smart video montage using Gemini AI.
     
@@ -63,6 +67,7 @@ def generate_smart_montage(original_video_path, audio_path, sfx_path, bgm_path, 
 ROLE: Senior Film Editor + Assistant Director.
 
 YOU MUST FOLLOW THIS PIPELINE STRICTLY:
+MAIN RULE : YOU MUST FOLLOW THE RULES AS GIVEN SAME AS BELOW, NO DEVIATIONS ALLOWED.
 
 STEP 1 — AUDIO SEGMENTATION (MANDATORY)
 - First, transcribe the audio internally.
@@ -79,6 +84,7 @@ For EACH audio unit:
 - If no perfect match exists:
   • Use the closest contextual visual
   • NEVER reuse the same video moment twice
+- MAXIMUM Segment allowed is 5 to 6 only. 
 
 STEP 3 — VIDEO CUT RULES
 - Each audio unit maps to EXACTLY ONE video segment.
@@ -88,6 +94,7 @@ STEP 3 — VIDEO CUT RULES
 OUTPUT RULES (STRICT):
 - Output ONLY a JSON array
 - Each item represents ONE audio unit
+- you can play random clips while tts include the CTA (like subscribe scenes)
 - Format:
 [
   {
@@ -98,7 +105,7 @@ OUTPUT RULES (STRICT):
 - Number of segments MUST reflect spoken sentence count
 - DO NOT explain anything
 - DO NOT include text, transcription, or comments
-
+NOTE : if you break any of rules make sure to re think.
     """
 
     # STEP 3: Retry Logic with 2.0 Flash
@@ -109,7 +116,7 @@ OUTPUT RULES (STRICT):
         try:
             print(f"Requesting Gemini (Attempt {attempt + 1})...")
             response = client.models.generate_content(
-                model="gemini-2.5-flash", 
+                model="gemini-3-flash-preview", 
                 contents=[video_file, audio_file, master_prompt],
                 config=types.GenerateContentConfig(
                     temperature=0.0, 
@@ -153,30 +160,30 @@ def build_hollywood_ffmpeg(v_path, narration_path, sfx_path, bgm_path, segments)
     video_chain = f"{v_filters}{concat_nodes}concat=n={len(segments)}:v=1:a=0[outv];"
     
     audio_chain = (
-        f"[1:a]volume=5.0[a_narr];" 
+        f"[1:a]volume=7.0[a_narr];" 
         f"[2:a]volume=1.0[a_sfx];" 
-        f"[3:a]volume=0.1[a_bgm];" 
+        f"[3:a]volume=0.30[a_bgm];" 
         f"[a_narr][a_sfx][a_bgm]amix=inputs=3:duration=first:dropout_transition=2[outa]"
     )
 
     full_filter = video_chain + audio_chain
-
+    Output = "Output/" + RandomFile()
     # Windows ke liye filter ko double quotes " " mein wrap karna zaroori hai
     cmd = (
         f'ffmpeg -y -i "{v_path}" -i "{n_path}" -i "{s_path}" -stream_loop -1 -i "{b_path}" '
         f'-filter_complex "{full_filter}" '
         f'-map "[outv]" -map "[outa]" '
-        f'-c:v libx264 -preset fast -pix_fmt yuv420p -c:a aac -b:a 192k final_output.mp4'
+        f'-c:v libx264 -preset fast -pix_fmt yuv420p -c:a aac -b:a 192k "{Output}"'
     )
     return cmd
 
 # --- Execute Testing ---
 if __name__ == "__main__":
     # Ensure these paths are correct in your project
-    v_test = "downloads/video.mp4"
-    n_test = "downloads/voiceover.mp3"
-    s_test = "assets/sfx.mp3"
-    b_test = "assets/bgm.mp3"
+    v_test = "downloads/1.mp4"
+    n_test = "Audio/tts_1768042948.wav"
+    s_test = "sfx/wow.mp3"
+    b_test = "bgm/fun.mp3"
     
     if os.path.exists(v_test) and os.path.exists(n_test):
         final_cmd = generate_smart_montage(v_test, n_test, s_test, b_test)

@@ -30,10 +30,11 @@ function App() {
   // Step 2: Script
   const [script, setScript] = useState('')
   const [audioPath, setAudioPath] = useState('')
+  const [translating, setTranslating] = useState(false)
   
   // Step 3: Generate Video
-  const [bgmPath, setBgmPath] = useState('assets/fun.mp3')
-  const [sfxPath, setSfxPath] = useState('assets/sfx.mp3')
+  const [bgmPath, setBgmPath] = useState('bgm/fun.mp3')
+  const [sfxPath, setSfxPath] = useState('sfx/wow.mp3')
   const [finalVideoPath, setFinalVideoPath] = useState('')
   
   // Load API keys from localStorage
@@ -184,6 +185,51 @@ function App() {
       setLoading(false)
     }
   }
+  
+  const handleTranslateToHindi = async () => {
+    if (!script.trim()) {
+      setError('Please enter text to translate')
+      return
+    }
+    
+    // Get the latest enabled keys from state
+    const enabledKeys = geminiKeys.filter(k => k.enabled)
+    if (enabledKeys.length === 0) {
+      setError('No enabled Gemini API key found')
+      return
+    }
+    
+    // Use the first enabled key
+    const activeKey = enabledKeys[0]
+    
+    setTranslating(true)
+    setError('')
+    
+    try {
+      const response = await axios.post(`${API_BASE}/translate-hindi`, {
+        text: script
+      }, {
+        headers: {
+          'X-Gemini-Key': activeKey.key
+        }
+      })
+      
+      // Update the script with the translated text
+      setScript(response.data.translated_text)
+      
+      // Update last used timestamp
+      const now = new Date()
+      setGeminiKeys(prevKeys => prevKeys.map(k => 
+        k.id === activeKey.id ? {...k, lastUsed: now} : k
+      ))
+      
+      setError('')
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Translation failed')
+    } finally {
+      setTranslating(false)
+    }
+  }
 
   const handleGenerateVideo = async () => {
     if (!downloadedVideo?.path || !audioPath || !bgmPath || !sfxPath) {
@@ -276,11 +322,25 @@ function App() {
   }
   
   const updateGeminiKey = (id, updates) => {
-    setGeminiKeys(prevKeys => prevKeys.map(k => k.id === id ? {...k, ...updates} : k))
+    setGeminiKeys(prevKeys => {
+      return prevKeys.map(k => {
+        if (k.id === id) {
+          return {...k, ...updates};
+        }
+        return k;
+      });
+    });
   }
   
   const updateElevenLabsKey = (id, updates) => {
-    setElevenLabsKeys(prevKeys => prevKeys.map(k => k.id === id ? {...k, ...updates} : k))
+    setElevenLabsKeys(prevKeys => {
+      return prevKeys.map(k => {
+        if (k.id === id) {
+          return {...k, ...updates};
+        }
+        return k;
+      });
+    });
   }
   
   const deleteGeminiKey = (id) => {
@@ -334,12 +394,12 @@ function App() {
     <div className="app-container">
       {/* Environment Settings Button */}
       <button className="env-settings-btn" onClick={() => setShowEnvModal(true)}>
-        ⚙️ Env Settings
+        ⚙️
       </button>
 
       <div className="card">
         <h1 className="title">🎬 Algovids AI</h1>
-        <p className="subtitle">Create AI-powered videos in 3 simple steps</p>
+        <p className="subtitle">AI video creator in 3 steps</p>
         
         {/* Step Navigation with Animation */}
         <div className="step-navigation">
@@ -423,7 +483,7 @@ function App() {
           <div className="step-content">
             <h2>🎙️ Step 2: Generate Voiceover</h2>
             <p className="step-description">Enter your script for AI voiceover generation</p>
-            
+                    
             <textarea
               placeholder="Enter your script here..."
               value={script}
@@ -431,22 +491,32 @@ function App() {
               className="textarea-field"
               rows="6"
             />
-            
-            <button 
-              onClick={handleGenerateTTS} 
-              disabled={loading}
-              className="btn btn-primary"
-            >
-              {loading ? '⏳ Generating Audio...' : '🎙️ Generate Voiceover'}
-            </button>
-            
+                    
+            <div className="button-row">
+              <button 
+                onClick={handleTranslateToHindi} 
+                disabled={translating || !script.trim()}
+                className="btn btn-magic"
+              >
+                {translating ? '...' : '✨'}
+              </button>
+                      
+              <button 
+                onClick={handleGenerateTTS} 
+                disabled={loading || !script.trim()}
+                className="btn btn-primary"
+              >
+                {loading ? '⏳ Generating Audio...' : '🎙️ Generate Voiceover'}
+              </button>
+            </div>
+                    
             {audioPath && (
               <div className="success-box">
                 <h3>✅ Audio Generated!</h3>
                 <p><strong>Path:</strong> {audioPath}</p>
                 <button 
                   className="btn btn-preview"
-                  onClick={() => openPreview('audio', `${API_BASE}/audio/${encodeURIComponent(audioPath.split(/[\\\/]/).pop())}`)}
+                  onClick={() => openPreview('audio', `${API_BASE}/audio/${encodeURIComponent(audioPath.split(/[\/]/).pop())}`)}
                 >
                   🎙️ Preview Audio
                 </button>
@@ -461,26 +531,28 @@ function App() {
             <h2>🎥 Step 3: Generate Final Video</h2>
             <p className="step-description">Add BGM and SFX to create your final video</p>
             
-            <div className="form-group">
-              <label>🎵 Background Music (BGM) Path:</label>
-              <input
-                type="text"
-                placeholder="assets/bgm.mp3"
-                value={bgmPath}
-                onChange={(e) => setBgmPath(e.target.value)}
-                className="input-field"
-              />
-            </div>
-            
-            <div className="form-group">
-              <label>🔊 Sound Effects (SFX) Path:</label>
-              <input
-                type="text"
-                placeholder="assets/sfx.mp3"
-                value={sfxPath}
-                onChange={(e) => setSfxPath(e.target.value)}
-                className="input-field"
-              />
+            <div className="form-group-row">
+              <div className="form-group-half">
+                <label>🎵 Background Music (BGM) Path:</label>
+                <input
+                  type="text"
+                  placeholder="assets/bgm.mp3"
+                  value={bgmPath}
+                  onChange={(e) => setBgmPath(e.target.value)}
+                  className="input-field"
+                />
+              </div>
+              
+              <div className="form-group-half">
+                <label>🔊 Sound Effects (SFX) Path:</label>
+                <input
+                  type="text"
+                  placeholder="assets/sfx.mp3"
+                  value={sfxPath}
+                  onChange={(e) => setSfxPath(e.target.value)}
+                  className="input-field"
+                />
+              </div>
             </div>
             
             <div className="info-box">
@@ -524,7 +596,7 @@ function App() {
             <div className="modal-body">
               {/* Gemini AI Section */}
               <div className="api-service-section">
-                <div className="section-header">
+                <div className="api-service-section-header">
                   <div className="service-title">
                     <span className="service-icon">🤖</span>
                     <h3>Gemini AI Keys</h3>
@@ -559,7 +631,6 @@ function App() {
                         </div>
                       </div>
                       <input
-                        type="password"
                         value={keyObj.key}
                         onChange={(e) => updateGeminiKey(keyObj.id, {key: e.target.value})}
                         className="api-key-input"
@@ -578,7 +649,7 @@ function App() {
 
               {/* ElevenLabs Section */}
               <div className="api-service-section">
-                <div className="section-header">
+                <div className="api-service-section-header">
                   <div className="service-title">
                     <span className="service-icon">🎙️</span>
                     <h3>ElevenLabs TTS Keys</h3>
@@ -613,7 +684,6 @@ function App() {
                         </div>
                       </div>
                       <input
-                        type="password"
                         value={keyObj.key}
                         onChange={(e) => updateElevenLabsKey(keyObj.id, {key: e.target.value})}
                         className="api-key-input"

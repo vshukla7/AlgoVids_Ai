@@ -43,17 +43,17 @@ def generate_voiceover(script: str, api_key: str = None) -> str:
     headers = {
         "xi-api-key": elevenlabs_key,
         "Content-Type": "application/json",
-        "Accept": "audio/wav", # Ya "audio/mpeg" agar .mp3 chahiye
+        "Accept": "audio/wav", 
     }
 
-    # Aapka exact payload
+    # payload
     payload = {
         "text": script,
         "model_id": "eleven_multilingual_v2",
         "voice_settings": {
             "stability": 0.92,
             "similarity_boost": 0.95,
-            "speed": 1.2 , 
+            "speed": 1.0, 
         }
     }
 
